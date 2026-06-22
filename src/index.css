@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400;1,500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-serif: "Lora", Georgia, serif;
+}
+
+/* Scrollbar styling for high-density console logs */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #EDEDEB;
+  border-left: 1px solid #141414;
+}
+::-webkit-scrollbar-thumb {
+  background: #141414;
+  border-radius: 0px;
+}
+/* Custom styling for Leaflet grayscale mapping */
+.map-grayscale .leaflet-tile {
+  filter: grayscale(100%) contrast(1.1) brightness(0.95) invert(0);
+}
+.map-grayscale {
+  background: #E4E3E0 !important;
+}
+.leaflet-container {
+  font-family: inherit !important;
+}
+.leaflet-bar {
+  border: 1px solid #141414 !important;
+  box-shadow: none !important;
+  border-radius: 0px !important;
+}
+.leaflet-bar a {
+  background-color: #ffffff !important;
+  color: #141414 !important;
+  border-bottom: 1px solid #141414 !important;
+  border-radius: 0px !important;
+  font-family: monospace !important;
+  font-weight: bold !important;
+}
+.leaflet-bar a:last-child {
+  border-bottom: none !important;
+}
+.leaflet-bar a:hover {
+  background-color: #141414 !important;
+  color: #E4E3E0 !important;
+}
+
+

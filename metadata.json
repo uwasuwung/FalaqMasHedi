@@ -1,0 +1,6 @@
+{
+  "name": "Metode Integral-Hilal",
+  "description": "Kalkulator astronomi kriteria Hilal Versi 3.0 menggunakan metode integrasi numerik toposentrik, fisika orbital relativistik, dan konversi penanggalan.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
