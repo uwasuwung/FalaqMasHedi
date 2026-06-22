@@ -107,7 +107,7 @@ const HIJRI_MONTHS = [
 ];
 
 export default function App() {
-  // Input states
+  // Master calculation inputs (computed ONLY on hitung)
   const [hijriYear, setHijriYear] = useState<number>(1448);
   const [hijriMonth, setHijriMonth] = useState<number>(9); // Default Ramadhan
   const [latitude, setLatitude] = useState<number>(-7.1706);
@@ -116,21 +116,106 @@ export default function App() {
   const [horizonAngle, setHorizonAngle] = useState<number>(0.2);
   const [eTotalThreshold, setETotalThreshold] = useState<number>(80);
   const [hIntegralThreshold, setHIntegralThreshold] = useState<number>(2.0);
-  
-  // Atmospheric model states
   const [refractionModel, setRefractionModel] = useState<"saemundsson" | "custom">("saemundsson");
   const [pressureMb, setPressureMb] = useState<number>(1013.25);
   const [temperatureC, setTemperatureC] = useState<number>(10.0);
-  
-  // Numerical integration precision state
   const [simpsonIntervals, setSimpsonIntervals] = useState<number>(20);
-  
+
+  // Draft inputs for immediate user controls
+  const [draftHijriYear, setDraftHijriYear] = useState<number>(1448);
+  const [draftHijriMonth, setDraftHijriMonth] = useState<number>(9);
+  const [draftLatitude, setDraftLatitude] = useState<number>(-7.1706);
+  const [draftLongitude, setDraftLongitude] = useState<number>(112.6074);
+  const [draftElevation, setDraftElevation] = useState<number>(120);
+  const [draftHorizonAngle, setDraftHorizonAngle] = useState<number>(0.2);
+  const [draftETotalThreshold, setDraftETotalThreshold] = useState<number>(80);
+  const [draftHIntegralThreshold, setDraftHIntegralThreshold] = useState<number>(2.0);
+  const [draftRefractionModel, setDraftRefractionModel] = useState<"saemundsson" | "custom">("saemundsson");
+  const [draftPressureMb, setDraftPressureMb] = useState<number>(1013.25);
+  const [draftTemperatureC, setDraftTemperatureC] = useState<number>(10.0);
+  const [draftSimpsonIntervals, setDraftSimpsonIntervals] = useState<number>(20);
+
+  // Markaz Custom List
+  interface Markaz {
+    name: string;
+    lat: number;
+    lon: number;
+    el: number;
+    horizon: number;
+    desc: string;
+    isCustom?: boolean;
+  }
+
+  const [markazList, setMarkazList] = useState<Markaz[]>(() => {
+    try {
+      const saved = localStorage.getItem("integral_hilal_markaz_list");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return [
+      {
+        name: "Markaz Obs. Bosscha, Lembang",
+        lat: -6.8242,
+        lon: 107.6186,
+        el: 1310,
+        horizon: 0.0,
+        desc: "Observatorium tertua di Indonesia, rintangan ufuk sangat minim."
+      },
+      {
+        name: "Markaz POB Condrodipo, Gresik",
+        lat: -7.1706,
+        lon: 112.6074,
+        el: 120,
+        horizon: 0.5,
+        desc: "Lokasi legendaris Jawa Timur dengan ufuk membentang di atas laut."
+      },
+      {
+        name: "Markaz POB Pelabuhan Ratu, Sukabumi",
+        lat: -6.9856,
+        lon: 106.4389,
+        el: 75,
+        horizon: 0.2,
+        desc: "POB utama menghadap Samudera Hindia di pantai selatan Jawa Barat."
+      },
+      {
+        name: "Markaz Baiturrahman, Aceh",
+        lat: 5.5536,
+        lon: 95.3171,
+        el: 10,
+        horizon: 0.1,
+        desc: "Ujung barat laut Nusantara, memberikan ufuk waktu rukyat terlama."
+      },
+      {
+        name: "Markaz Gili Trawangan, NTB",
+        lat: -8.3503,
+        lon: 116.0372,
+        el: 5,
+        horizon: 0.3,
+        desc: "Lokasi kepulauan tropis di NTB dengan panorama ufuk laut murni."
+      }
+    ];
+  });
+
+  const [newMarkazName, setNewMarkazName] = useState<string>("");
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("integral_hilal_markaz_list", JSON.stringify(markazList));
+    } catch (e) {
+      console.error("Failed to save markaz list:", e);
+    }
+  }, [markazList]);
+
   // Preset search query state
   const [presetSearchQuery, setPresetSearchQuery] = useState<string>("");
   
   // GPS Geolocation state
   const [gpsLoading, setGpsLoading] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+
+  // Calculation control state
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
   
   interface SavedRun {
     id: string;
@@ -741,12 +826,16 @@ export default function App() {
     "[17:04:16] Topocentric atmospheric model synchronized."
   ]);
 
-  // Handle Preset selection
-  const handleSelectPreset = (preset: typeof LANDMARK_PRESETS[0]) => {
-    setLatitude(preset.lat);
-    setLongitude(preset.lon);
-    setElevation(preset.el);
-    setHorizonAngle(preset.horizon);
+  // Handle Markaz selection
+  const handleSelectPreset = (p: Markaz) => {
+    setDraftLatitude(p.lat);
+    setDraftLongitude(p.lon);
+    setDraftElevation(p.el);
+    setDraftHorizonAngle(p.horizon);
+    setChecksumLog(prev => [
+      ...prev,
+      `[${new Date().toLocaleTimeString("id-ID")}] MARKAZ: Memuat koordinat "${p.name}". Klik "HITUNG INTEGRAL HILAL" untuk memproses.`
+    ]);
   };
 
   // Handle GPS location query
@@ -760,12 +849,12 @@ export default function App() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setLatitude(parseFloat(position.coords.latitude.toFixed(6)));
-        setLongitude(parseFloat(position.coords.longitude.toFixed(6)));
+        setDraftLatitude(parseFloat(position.coords.latitude.toFixed(6)));
+        setDraftLongitude(parseFloat(position.coords.longitude.toFixed(6)));
         setGpsLoading(false);
         setChecksumLog(prev => [
           ...prev,
-          `[${new Date().toLocaleTimeString("id-ID")}] GPS: Sukses mendeteksi lokasi (Lat: ${position.coords.latitude.toFixed(4)}°, Lon: ${position.coords.longitude.toFixed(4)}°).`
+          `[${new Date().toLocaleTimeString("id-ID")}] GPS: Sukses mendeteksi lokasi (Lat: ${position.coords.latitude.toFixed(4)}°, Lon: ${position.coords.longitude.toFixed(4)}°). Klik "HITUNG INTEGRAL HILAL" untuk memproses.`
         ]);
       },
       (error) => {
@@ -788,20 +877,118 @@ export default function App() {
     );
   };
 
-  // Filtered presets based on search query
+  // Filtered preset markaz list based on search query
   const filteredPresets = useMemo(() => {
-    if (!presetSearchQuery.trim()) return LANDMARK_PRESETS;
+    if (!presetSearchQuery.trim()) return markazList;
     const q = presetSearchQuery.toLowerCase();
-    return LANDMARK_PRESETS.filter(p => {
+    return markazList.filter(p => {
       return (
         p.name.toLowerCase().includes(q) ||
         p.lat.toString().includes(q) ||
         p.lon.toString().includes(q) ||
         p.lat.toFixed(4).includes(q) ||
-        p.lon.toFixed(4).includes(q)
+        p.lon.toFixed(4).includes(q) ||
+        (p.desc && p.desc.toLowerCase().includes(q))
       );
     });
-  }, [presetSearchQuery]);
+  }, [presetSearchQuery, markazList]);
+
+  // Check state differences to drive calculating pulse
+  const hasUnsavedChanges = useMemo(() => {
+    return (
+      draftHijriYear !== hijriYear ||
+      draftHijriMonth !== hijriMonth ||
+      Math.abs(draftLatitude - latitude) > 0.00001 ||
+      Math.abs(draftLongitude - longitude) > 0.00001 ||
+      draftElevation !== elevation ||
+      draftHorizonAngle !== horizonAngle ||
+      draftETotalThreshold !== eTotalThreshold ||
+      draftHIntegralThreshold !== hIntegralThreshold ||
+      draftRefractionModel !== refractionModel ||
+      draftPressureMb !== pressureMb ||
+      draftTemperatureC !== temperatureC ||
+      draftSimpsonIntervals !== simpsonIntervals
+    );
+  }, [
+    draftHijriYear, draftHijriMonth, draftLatitude, draftLongitude, draftElevation, draftHorizonAngle,
+    draftETotalThreshold, draftHIntegralThreshold, draftRefractionModel, draftPressureMb, draftTemperatureC, draftSimpsonIntervals,
+    hijriYear, hijriMonth, latitude, longitude, elevation, horizonAngle,
+    eTotalThreshold, hIntegralThreshold, refractionModel, pressureMb, temperatureC, simpsonIntervals
+  ]);
+
+  // Handle addition of custom Markaz
+  const handleAddMarkaz = () => {
+    if (!newMarkazName.trim()) {
+      alert("Silakan masukkan nama Markaz baru terlebih dahulu!");
+      return;
+    }
+    
+    // Check duplication
+    if (markazList.some(m => m.name.toLowerCase() === newMarkazName.trim().toLowerCase())) {
+      alert("Nama Markaz ini sudah terdaftar!");
+      return;
+    }
+
+    const newMarkaz: Markaz = {
+      name: newMarkazName.trim(),
+      lat: parseFloat(draftLatitude.toFixed(6)),
+      lon: parseFloat(draftLongitude.toFixed(6)),
+      el: Math.round(draftElevation),
+      horizon: parseFloat(draftHorizonAngle.toFixed(2)),
+      desc: "Markaz kustom ditentukan pengguna.",
+      isCustom: true
+    };
+
+    setMarkazList(prev => [...prev, newMarkaz]);
+    setNewMarkazName("");
+    setChecksumLog(prev => [
+      ...prev,
+      `[${new Date().toLocaleTimeString("id-ID")}] MARKAZ: Berhasil menambahkan Markaz Baru: "${newMarkaz.name}".`
+    ]);
+  };
+
+  // Handle deletion of Markaz
+  const handleDeleteMarkaz = (nameToDelete: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // prevent select
+    if (window.confirm(`Apakah Anda yakin ingin menghapus Markaz "${nameToDelete}"?`)) {
+      setMarkazList(prev => prev.filter(m => m.name !== nameToDelete));
+      setChecksumLog(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString("id-ID")}] MARKAZ: Menghapus "${nameToDelete}".`
+      ]);
+    }
+  };
+
+  // Run the core Simpson 1/3 integration engine
+  const handlePerformCalculation = () => {
+    setIsCalculating(true);
+    setChecksumLog(prev => [
+      ...prev,
+      `[${new Date().toLocaleTimeString("id-ID")}] INTEGRASI: Memulai komputasi Simpson 1/3 (n = ${draftSimpsonIntervals})...`,
+      `[${new Date().toLocaleTimeString("id-ID")}] INTEGRASI: Memindai kurva tinggi efektif dan elongasi toposentris...`
+    ]);
+
+    setTimeout(() => {
+      setHijriYear(draftHijriYear);
+      setHijriMonth(draftHijriMonth);
+      setLatitude(draftLatitude);
+      setLongitude(draftLongitude);
+      setElevation(draftElevation);
+      setHorizonAngle(draftHorizonAngle);
+      setETotalThreshold(draftETotalThreshold);
+      setHIntegralThreshold(draftHIntegralThreshold);
+      setRefractionModel(draftRefractionModel);
+      setPressureMb(draftPressureMb);
+      setTemperatureC(draftTemperatureC);
+      setSimpsonIntervals(draftSimpsonIntervals);
+
+      setIsCalculating(false);
+      setChecksumLog(prev => [
+        ...prev,
+        `[${new Date().toLocaleTimeString("id-ID")}] SUKSES: Komputasi Hilal selesai divalidasi.`
+      ]);
+    }, 450);
+  };
 
   // Perform Ephemeris & Integration calculations reactively
   const observerConfig: ObserverConfig = useMemo(() => ({
@@ -958,25 +1145,25 @@ export default function App() {
         {/* SIDEBAR FOR CONTROLS & PRESETS */}
         <aside className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-[#141414] bg-[#EDEDEB] overflow-y-auto shrink-0 flex flex-col divide-y divide-[#141414] lg:max-h-[calc(100vh-64px)]">
           
-          {/* PRESETS */}
+          {/* PRESETS renamed to MARKAZ */}
           <div className="p-4">
             <div className="flex justify-between items-center mb-2.5">
               <h2 className="text-[10px] font-serif italic opacity-60 uppercase flex items-center gap-1 text-[#141414]">
-                <MapPin className="h-3 w-3 inline text-[#141414]" /> OBSERVATION PRESETS
+                <MapPin className="h-3 w-3 inline text-[#141414]" /> MARKAZ OBSERVASI
               </h2>
               <span className="text-[8px] font-mono font-bold bg-[#141414]/10 px-1 py-0.5 rounded-sm">
-                {filteredPresets.length} Kota
+                {filteredPresets.length} Lokasi
               </span>
             </div>
 
             {/* Precise Search Bar */}
-            <div className="relative mb-3 font-mono">
+            <div className="relative mb-2 font-mono">
               <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-[#141414]/55">
                 <Search className="h-3.5 w-3.5" />
               </div>
               <input
                 type="text"
-                placeholder="Cari Kota / Koordinat..."
+                placeholder="Cari Markaz..."
                 value={presetSearchQuery}
                 onChange={(e) => setPresetSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-7 py-1.5 bg-white border border-[#141414] text-[10px] placeholder-[#141414]/40 font-mono text-[#141414] focus:outline-none focus:ring-0"
@@ -991,25 +1178,63 @@ export default function App() {
               )}
             </div>
 
+            {/* Tambah Markaz Form */}
+            <div className="border border-[#141414] bg-[#EDEDEB] p-2 mb-3 space-y-1.5">
+              <p className="text-[8.5px] font-mono uppercase font-bold text-[#141414]/70">Daftarkan Markaz Kustom:</p>
+              <div className="flex gap-1">
+                <input
+                  type="text"
+                  placeholder="Nama Markaz Baru..."
+                  value={newMarkazName}
+                  onChange={(e) => setNewMarkazName(e.target.value)}
+                  className="flex-1 bg-white border border-[#141414] px-2 py-1 text-[9px] font-mono focus:outline-none text-[#141414]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddMarkaz}
+                  className="bg-[#141414] text-[#E4E3E0] hover:bg-[#141414]/80 px-2 py-1 font-mono text-[9px] font-bold uppercase transition-colors shrink-0 cursor-pointer"
+                  title="Tambahkan koordinat draft saat ini sebagai Markaz baru"
+                >
+                  + Simpan
+                </button>
+              </div>
+              <p className="text-[7.5px] text-[#141414]/60 font-mono lowercase leading-tight">
+                *menyimpan koordinat draft saat ini: L: {draftLatitude.toFixed(4)}°, B: {draftLongitude.toFixed(4)}°, E: {draftElevation}m
+              </p>
+            </div>
+
+            {/* Markaz list block */}
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               {filteredPresets.length > 0 ? (
                 filteredPresets.map((p, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleSelectPreset(p)}
-                    className="w-full text-left p-2 border border-[#141414] bg-white hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors cursor-pointer group"
-                  >
-                    <p className="text-[10px] font-mono font-bold uppercase text-[#141414] group-hover:text-[#E4E3E0] truncate leading-tight">{p.name}</p>
-                    <div className="flex items-center justify-between text-[8px] font-mono text-[#141414]/75 group-hover:text-[#E4E3E0]/80 mt-1 uppercase">
-                      <span>LAT: {p.lat.toFixed(4)}°</span>
-                      <span>LON: {p.lon.toFixed(4)}°</span>
-                      <span>EL: {p.el}M</span>
-                    </div>
-                  </button>
+                  <div key={idx} className="relative group">
+                    <button
+                      onClick={() => handleSelectPreset(p)}
+                      className="w-full text-left p-2 border border-[#141414] bg-white hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors cursor-pointer group-hover:bg-[#141414] group-hover:text-[#E4E3E0]"
+                    >
+                      <div className="flex justify-between items-start gap-1 pr-6">
+                        <p className="text-[10px] font-mono font-bold uppercase text-[#141414] group-hover:text-[#E4E3E0] truncate leading-tight select-none">{p.name}</p>
+                      </div>
+                      <div className="flex items-center justify-between text-[8px] font-mono text-[#141414]/75 group-hover:text-[#E4E3E0]/80 mt-1 uppercase">
+                        <span>LAT: {p.lat.toFixed(4)}°</span>
+                        <span>LON: {p.lon.toFixed(4)}°</span>
+                        <span>EL: {p.el}M</span>
+                      </div>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteMarkaz(p.name, e)}
+                      className="absolute right-1.5 top-1.5 p-1 bg-white hover:bg-rose-100 hover:text-rose-800 border border-black/15 text-gray-500 rounded cursor-pointer transition-colors opacity-40 group-hover:opacity-100 z-10"
+                      title="Hapus Markaz"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))
               ) : (
                 <div className="text-center p-4 border border-dashed border-[#141414]/30 bg-[#141414]/5 text-[#141414]/60 text-[9px] font-mono">
-                  Tidak ada observatorium / kota cocok
+                  Tidak ada markaz cocok.
                 </div>
               )}
             </div>
@@ -1018,16 +1243,39 @@ export default function App() {
           {/* PARAMETERS FORM */}
           <div className="p-4 space-y-3">
             <h2 className="text-[10px] font-serif italic mb-3 opacity-60 uppercase flex items-center gap-1 text-[#141414]">
-              <Sliders className="h-3 w-3 inline text-[#141414]" /> OBSERVATION PARAMETERS
+              <Sliders className="h-3 w-3 inline text-[#141414]" /> PARAMETER OBSERVASI
             </h2>
+
+            {/* KOMPUTASI MANUAl / SUBMIT BUTTON */}
+            <div className="space-y-2 pb-2">
+              <button
+                type="button"
+                onClick={handlePerformCalculation}
+                disabled={isCalculating}
+                className={`w-full py-2.5 px-4 border border-[#141414] font-mono text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  hasUnsavedChanges 
+                    ? "bg-amber-500 text-black border-[#141414] animate-pulse hover:bg-amber-600 shadow-[3px_3px_0px_0px_#141414] active:translate-x-0.5 active:translate-y-0.5" 
+                    : "bg-[#141414] text-[#E4E3E0] hover:bg-[#141414]/90"
+                }`}
+              >
+                <Cpu className={`h-4 w-4 ${isCalculating ? "animate-spin" : ""}`} />
+                <span>{isCalculating ? "MEMPROSES INTEGRAL..." : "HITUNG INTEGRAL HILAL"}</span>
+              </button>
+              
+              {hasUnsavedChanges && (
+                <div className="text-[8px] font-mono font-bold text-[#b45309] bg-amber-50 border border-amber-500/50 p-2 uppercase leading-normal text-center select-none">
+                  ⚠️ Parameter baris draft diubah. Klik 'HITUNG INTEGRAL HILAL' di atas untuk memproses hasil baru.
+                </div>
+              )}
+            </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">Tahun Hijriah</label>
                 <input 
                   type="number" 
-                  value={hijriYear} 
-                  onChange={(e) => setHijriYear(parseInt(e.target.value) || 1448)}
+                  value={draftHijriYear} 
+                  onChange={(e) => setDraftHijriYear(parseInt(e.target.value) || 1448)}
                   min="1400" 
                   max="2000"
                   className="w-full bg-white border border-[#141414] px-2 py-1 text-xs font-mono focus:outline-none text-[#141414]"
@@ -1038,8 +1286,8 @@ export default function App() {
                 <label className="block text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">Bulan Hijriah</label>
                 <div className="relative">
                   <select 
-                    value={hijriMonth}
-                    onChange={(e) => setHijriMonth(parseInt(e.target.value))}
+                    value={draftHijriMonth}
+                    onChange={(e) => setDraftHijriMonth(parseInt(e.target.value))}
                     className="w-full bg-white border border-[#141414] px-2 py-1 text-xs font-mono focus:outline-none appearance-none text-[#141414]"
                   >
                     {HIJRI_MONTHS.map((m) => (
@@ -1056,15 +1304,15 @@ export default function App() {
             <div>
               <div className="flex justify-between items-center text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">
                 <span>Latitude (φ)</span>
-                <span className="font-mono text-xs">{latitude.toFixed(4)}°</span>
+                <span className="font-mono text-xs">{draftLatitude.toFixed(4)}°</span>
               </div>
               <input 
                 type="range" 
                 min="-90" 
                 max="90" 
                 step="0.0001"
-                value={latitude}
-                onChange={(e) => setLatitude(parseFloat(e.target.value))}
+                value={draftLatitude}
+                onChange={(e) => setDraftLatitude(parseFloat(e.target.value))}
                 className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
               />
               <div className="flex justify-between text-[8px] text-[#141414]/50 font-mono mt-0.5">
@@ -1077,15 +1325,15 @@ export default function App() {
             <div>
               <div className="flex justify-between items-center text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">
                 <span>Longitude (λ)</span>
-                <span className="font-mono text-xs">{longitude.toFixed(4)}°</span>
+                <span className="font-mono text-xs">{draftLongitude.toFixed(4)}°</span>
               </div>
               <input 
                 type="range" 
                 min="-180" 
                 max="180" 
                 step="0.0001"
-                value={longitude}
-                onChange={(e) => setLongitude(parseFloat(e.target.value))}
+                value={draftLongitude}
+                onChange={(e) => setDraftLongitude(parseFloat(e.target.value))}
                 className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
               />
               <div className="flex justify-between text-[8px] text-[#141414]/50 font-mono mt-0.5">
@@ -1118,8 +1366,8 @@ export default function App() {
                 <label className="block text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">Elevasi (m)</label>
                 <input 
                   type="number" 
-                  value={elevation} 
-                  onChange={(e) => setElevation(Math.max(0, parseFloat(e.target.value) || 0))}
+                  value={draftElevation} 
+                  onChange={(e) => setDraftElevation(Math.max(0, parseFloat(e.target.value) || 0))}
                   className="w-full bg-white border border-[#141414] px-2 py-1 text-xs font-mono focus:outline-none text-[#141414]"
                 />
               </div>
@@ -1131,8 +1379,8 @@ export default function App() {
                   step="0.1"
                   min="0"
                   max="10"
-                  value={horizonAngle} 
-                  onChange={(e) => setHorizonAngle(Math.max(0, parseFloat(e.target.value) || 0))}
+                  value={draftHorizonAngle} 
+                  onChange={(e) => setDraftHorizonAngle(Math.max(0, parseFloat(e.target.value) || 0))}
                   className="w-full bg-white border border-[#141414] px-2 py-1 text-xs font-mono focus:outline-none text-[#141414]"
                 />
               </div>
@@ -1149,15 +1397,15 @@ export default function App() {
               <div>
                 <div className="flex justify-between items-center text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">
                   <span>Ambang Elongasi (E_total)</span>
-                  <span className="font-mono text-xs">{eTotalThreshold} °j</span>
+                  <span className="font-mono text-xs">{draftETotalThreshold} °j</span>
                 </div>
                 <input 
                   type="range" 
                   min="30" 
                   max="200" 
                   step="5"
-                  value={eTotalThreshold}
-                  onChange={(e) => setETotalThreshold(parseInt(e.target.value))}
+                  value={draftETotalThreshold}
+                  onChange={(e) => setDraftETotalThreshold(parseInt(e.target.value))}
                   className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
                 />
               </div>
@@ -1165,15 +1413,15 @@ export default function App() {
               <div>
                 <div className="flex justify-between items-center text-[9px] uppercase font-mono font-bold text-[#141414]/70 mb-1">
                   <span>Ambang Tinggi (H_integral)</span>
-                  <span className="font-mono text-xs">{hIntegralThreshold.toFixed(1)} °j</span>
+                  <span className="font-mono text-xs">{draftHIntegralThreshold.toFixed(1)} °j</span>
                 </div>
                 <input 
                   type="range" 
                   min="0.5" 
                   max="10.0" 
                   step="0.1"
-                  value={hIntegralThreshold}
-                  onChange={(e) => setHIntegralThreshold(parseFloat(e.target.value))}
+                  value={draftHIntegralThreshold}
+                  onChange={(e) => setDraftHIntegralThreshold(parseFloat(e.target.value))}
                   className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
                 />
               </div>
@@ -1189,9 +1437,9 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
-                    onClick={() => setRefractionModel("saemundsson")}
+                    onClick={() => setDraftRefractionModel("saemundsson")}
                     className={`px-1.5 py-1 text-[8px] uppercase font-bold border cursor-pointer transition-all ${
-                      refractionModel === "saemundsson"
+                      draftRefractionModel === "saemundsson"
                         ? "bg-[#141414] text-white border-[#141414]"
                         : "bg-white text-[#141414] border-black/15 hover:border-[#141414]"
                     }`}
@@ -1200,9 +1448,9 @@ export default function App() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setRefractionModel("custom")}
+                    onClick={() => setDraftRefractionModel("custom")}
                     className={`px-1.5 py-1 text-[8px] uppercase font-bold border cursor-pointer transition-all ${
-                      refractionModel === "custom"
+                      draftRefractionModel === "custom"
                         ? "bg-[#141414] text-white border-[#141414]"
                         : "bg-white text-[#141414] border-black/15 hover:border-[#141414]"
                     }`}
@@ -1211,21 +1459,21 @@ export default function App() {
                   </button>
                 </div>
 
-                {refractionModel === "custom" ? (
+                {draftRefractionModel === "custom" ? (
                   <div className="space-y-2.5 pt-1">
                     {/* Pressure input slider */}
                     <div>
                       <div className="flex justify-between items-center text-[7.5px] uppercase font-bold text-[#141414]/70 mb-0.5">
                         <span>Tekanan Udara</span>
-                        <span>{pressureMb.toFixed(1)} mbar</span>
+                        <span>{draftPressureMb.toFixed(1)} mbar</span>
                       </div>
                       <input 
                         type="range" 
                         min="900" 
                         max="1100" 
                         step="1"
-                        value={pressureMb}
-                        onChange={(e) => setPressureMb(parseFloat(e.target.value))}
+                        value={draftPressureMb}
+                        onChange={(e) => setDraftPressureMb(parseFloat(e.target.value))}
                         className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
                       />
                     </div>
@@ -1234,15 +1482,15 @@ export default function App() {
                     <div>
                       <div className="flex justify-between items-center text-[7.5px] uppercase font-bold text-[#141414]/70 mb-0.5">
                         <span>Suhu Sekitar</span>
-                        <span>{temperatureC.toFixed(1)} °C</span>
+                        <span>{draftTemperatureC.toFixed(1)} °C</span>
                       </div>
                       <input 
                         type="range" 
                         min="-15" 
                         max="50" 
                         step="0.5"
-                        value={temperatureC}
-                        onChange={(e) => setTemperatureC(parseFloat(e.target.value))}
+                        value={draftTemperatureC}
+                        onChange={(e) => setDraftTemperatureC(parseFloat(e.target.value))}
                         className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
                       />
                     </div>
@@ -1264,15 +1512,15 @@ export default function App() {
                 <div>
                   <div className="flex justify-between items-center text-[7.5px] uppercase font-bold text-[#141414]/70 mb-1">
                     <span>Jumlah Interval (n)</span>
-                    <span className="text-xs bg-[#141414] text-white px-1.5 py-0.5 rounded-sm font-semibold">{simpsonIntervals}</span>
+                    <span className="text-xs bg-[#141414] text-white px-1.5 py-0.5 rounded-sm font-semibold">{draftSimpsonIntervals}</span>
                   </div>
                   <input 
                     type="range" 
                     min="4" 
                     max="120" 
                     step="2"
-                    value={simpsonIntervals}
-                    onChange={(e) => setSimpsonIntervals(parseInt(e.target.value))}
+                    value={draftSimpsonIntervals}
+                    onChange={(e) => setDraftSimpsonIntervals(parseInt(e.target.value))}
                     className="w-full h-1 bg-[#D8D7D4] rounded-none appearance-none cursor-pointer accent-[#141414]"
                   />
                   <div className="flex justify-between text-[7px] text-[#141414]/50 mt-1 uppercase font-bold">
@@ -1528,11 +1776,11 @@ export default function App() {
                   {/* Column 1: Interactive Leaflet Map */}
                   <div className="lg:col-span-1">
                     <InteractiveMap 
-                      latitude={latitude}
-                      longitude={longitude}
+                      latitude={draftLatitude}
+                      longitude={draftLongitude}
                       onCoordinateChange={(lat, lon) => {
-                        setLatitude(lat);
-                        setLongitude(lon);
+                        setDraftLatitude(lat);
+                        setDraftLongitude(lon);
                       }}
                     />
                   </div>
