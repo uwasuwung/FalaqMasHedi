@@ -46,6 +46,7 @@ import { IntegralHilalEngine } from "./integral_hilal";
 import InteractiveMap from "./components/InteractiveMap";
 import MoonPhaseCanvas from "./components/MoonPhaseCanvas";
 import SkyPositionCanvas from "./components/SkyPositionCanvas";
+import TelescopeIntegration from "./components/TelescopeIntegration";
 
 // Landmark Presets in Indonesia
 const LANDMARK_PRESETS = [
@@ -1135,6 +1136,12 @@ export default function App() {
             >
               Ephemeris NASA
             </button>
+            <button 
+              onClick={() => setActiveTab("telescope")} 
+              className={`px-3 py-1 font-bold uppercase border-l border-[#141414] cursor-pointer hover:bg-[#141414] hover:text-[#E4E3E0] transition-colors ${activeTab === 'telescope' ? 'bg-[#141414] text-[#E4E3E0]' : 'text-[#141414]'}`}
+            >
+              Kamera & Teleskop
+            </button>
           </div>
         </div>
       </header>
@@ -1557,10 +1564,10 @@ export default function App() {
             {activeTab === "dashboard" && (
               <motion.div
                 key="dashboard"
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.15 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-6"
               >
                 {/* DECISION AREA CORNER */}
@@ -1795,6 +1802,12 @@ export default function App() {
                       sunAzTopo={computationResult.sunAzTopo}
                       elongationTopoSunset={computationResult.elongationTopoSunset}
                       moonAgeHours={computationResult.moonAgeHours}
+                      latitude={draftLatitude}
+                      longitude={draftLongitude}
+                      elevation={draftElevation}
+                      refractionModel={draftRefractionModel}
+                      pressureMb={draftPressureMb}
+                      temperatureC={draftTemperatureC}
                     />
                   </div>
 
@@ -2108,10 +2121,10 @@ export default function App() {
             {activeTab === "sandbox" && (
               <motion.div
                 key="sandbox"
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.15 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-6"
               >
                 <div className="border border-[#141414] bg-[#EDEDEB] text-[#141414]">
@@ -2228,10 +2241,10 @@ export default function App() {
             {activeTab === "ephemeris" && (
               <motion.div
                 key="ephemeris"
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.15 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                 className="space-y-6"
               >
                 <div className="border border-[#141414] bg-[#EDEDEB] text-[#141414]">
@@ -2345,6 +2358,39 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {/* TAB 4: TELESCOPE & HARDWARE INTEGRATION */}
+            {activeTab === "telescope" && (
+              <motion.div
+                key="telescope"
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                className="space-y-6"
+              >
+                <TelescopeIntegration
+                  latitude={latitude}
+                  longitude={longitude}
+                  elevation={elevation}
+                  markazName={
+                    markazList.find(
+                      m => Math.abs(m.lat - latitude) < 0.001 && Math.abs(m.lon - longitude) < 0.001
+                    )?.name || "Kustom Markaz Astronomis"
+                  }
+                  hijriYear={hijriYear}
+                  hijriMonthName={getMonthName(hijriMonth)}
+                  onAddLog={(message: string) => {
+                    setChecksumLog(prev => [...prev, `[${new Date().toLocaleTimeString("id-ID")}] ${message}`]);
+                  }}
+                  moonAzimuth={computationResult.moonAzTopo}
+                  moonAltitude={computationResult.moonAltTopo}
+                  sunAltitude={computationResult.sunAltTopo}
+                  moonElongation={computationResult.elongationTopoSunset}
+                  moonAge={computationResult.moonAgeHours}
+                />
               </motion.div>
             )}
 
